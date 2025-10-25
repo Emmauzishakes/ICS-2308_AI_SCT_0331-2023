@@ -237,61 +237,60 @@ class CornersProblem(search.SearchProblem):
 
   You must select a suitable state space and successor function
   """
-  
+
   def __init__(self, startingGameState):
-    """
-    Stores the walls, pacman's starting position and corners.
-    """
     self.walls = startingGameState.getWalls()
     self.startingPosition = startingGameState.getPacmanPosition()
-    top, right = self.walls.height-2, self.walls.width-2 
-    self.corners = ((1,1), (1,top), (right, 1), (right, top))
-    for corner in self.corners:
-      if not startingGameState.hasFood(*corner):
-        print('Warning: no food in corner ' + str(corner))
-    self._expanded = 0 # Number of search nodes expanded
+    top, right = self.walls.height-2, self.walls.width-2
+    self.corners = ((1,1), (1,top), (right,1), (right,top))
+    self._expanded = 0  # DO NOT CHANGE
+    self.startState = (self.startingPosition, ())
+    self.costFn = lambda x: 1
+
+    # If start position is already at a corner, mark it visited
+    if self.startingPosition in self.corners:
+        self.startState = (self.startingPosition, (self.startingPosition,))
 
   def getStartState(self):
-    "Returns the start state (in your state space, not the full Pacman state space)"
-    return (self.startingPosition, tuple())
+    return self.startState
 
   def isGoalState(self, state):
-    "Returns whether this search state is a goal state of the problem"
-    currentPosition, visitedCorners = state
-    return len(visitedCorners) == len(self.corners)
+    """Goal is when all 4 corners have been visited"""
+    cornersVisited = state[1]
+    return len(cornersVisited) == 4
 
   def getSuccessors(self, state):
-    """
-    Returns successor states, the actions they require, and a cost of 1.
-    """
+    """Returns successor states, their actions, and step costs."""
     successors = []
-    currentPosition, visitedCorners = state
     for action in [Directions.NORTH, Directions.SOUTH, Directions.EAST, Directions.WEST]:
-      x, y = currentPosition
-      dx, dy = Actions.directionToVector(action)
-      nextx, nexty = int(x + dx), int(y + dy)
-      if not self.walls[nextx][nexty]:
-        nextPosition = (nextx, nexty)
-        newVisitedCorners = list(visitedCorners)
-        if nextPosition in self.corners and nextPosition not in newVisitedCorners:
-            newVisitedCorners.append(nextPosition)
-        newVisitedCorners = tuple(newVisitedCorners)
-        successors.append(((nextPosition, newVisitedCorners), action, 1))
+        x, y = state[0]
+        dx, dy = Actions.directionToVector(action)
+        nextx, nexty = int(x + dx), int(y + dy)
+
+        if not self.walls[nextx][nexty]:
+            nextPosition = (nextx, nexty)
+            cornersVisited = state[1]
+
+            # If Pacman reaches a new corner, mark it visited
+            if nextPosition in self.corners and nextPosition not in cornersVisited:
+                cornersVisited = cornersVisited + (nextPosition,)
+
+            successors.append(((nextPosition, cornersVisited), action, 1))
+
     self._expanded += 1
     return successors
 
   def getCostOfActions(self, actions):
-    """
-    Returns the cost of a particular sequence of actions.  If those actions
-    include an illegal move, return 999999.  This is implemented for you.
-    """
-    if actions == None: return 999999
-    x,y= self.startingPosition
+    """Returns cost of a sequence of actions."""
+    if actions is None: return 999999
+    x, y = self.startingPosition
+    cost = 0
     for action in actions:
-      dx, dy = Actions.directionToVector(action)
-      x, y = int(x + dx), int(y + dy)
-      if self.walls[x][y]: return 999999
-    return len(actions)
+        dx, dy = Actions.directionToVector(action)
+        x, y = int(x + dx), int(y + dy)
+        if self.walls[x][y]: return 999999
+        cost += 1
+    return cost
 
 
 def cornersHeuristic(state, problem):
@@ -307,22 +306,20 @@ def cornersHeuristic(state, problem):
   on the shortest path from the state to a goal of the problem; i.e.
   it should be admissible (as well as consistent).
   """
-  corners = problem.corners # These are the corner coordinates
-  walls = problem.walls # These are the walls of the maze, as a Grid (game.py)
-  
+  corners = problem.corners
+  walls = problem.walls
   position, visitedCorners = state
-  unvisitedCorners = [corner for corner in corners if corner not in visitedCorners]
-  
-  if not unvisitedCorners:
+
+  # Get list of unvisited corners
+  unvisited = [corner for corner in corners if corner not in visitedCorners]
+
+  # If all corners visited, heuristic is 0
+  if not unvisited:
       return 0
 
-  # Use the maximum Manhattan distance to any unvisited corner (admissible)
-  maxDist = 0
-  for corner in unvisitedCorners:
-      dist = util.manhattanDistance(position, corner)
-      if dist > maxDist:
-          maxDist = dist
-  return maxDist
+  # Compute max Manhattan distance to any remaining corner
+  distances = [util.manhattanDistance(position, corner) for corner in unvisited]
+  return max(distances)
 
 
 class AStarCornersAgent(SearchAgent):
@@ -387,31 +384,95 @@ class AStarFoodSearchAgent(SearchAgent):
     self.searchFunction = lambda prob: search.aStarSearch(prob, foodHeuristic)
     self.searchType = FoodSearchProblem
 
-def foodHeuristic(state, problem):
-  """
-  Your heuristic for the FoodSearchProblem goes here.
-  
-  This heuristic must be consistent to ensure correctness.  First, try to come up
-  with an admissible heuristic; almost all admissible heuristics will be consistent
-  as well.
-  
-  The state is a tuple ( pacmanPosition, foodGrid ) where foodGrid is a 
-  Grid (see game.py) of either True or False. You can call foodGrid.asList()
-  to get a list of food coordinates instead.
-  """
-  position, foodGrid = state
-  foodList = foodGrid.asList()
-  if not foodList:
-      return 0
 
-  # Admissible heuristic: distance to the farthest food dot
-  # (This is safe and often effective)
-  maxDist = 0
-  for food in foodList:
-      dist = util.manhattanDistance(position, food)
-      if dist > maxDist:
-          maxDist = dist
-  return maxDist
+from util import manhattanDistance
+
+# def foodHeuristic(state, problem):
+#   """
+#   Your heuristic for the FoodSearchProblem goes here.
+  
+#   This heuristic must be consistent to ensure correctness.  First, try to come up
+#   with an admissible heuristic; almost all admissible heuristics will be consistent
+#   as well.
+  
+#   The state is a tuple ( pacmanPosition, foodGrid ) where foodGrid is a 
+#   Grid (see game.py) of either True or False. You can call foodGrid.asList()
+#   to get a list of food coordinates instead.
+#   """
+#   position, foodGrid = state
+#   foodList = foodGrid.asList()
+
+#   if not foodList:
+#       return 0
+
+#   # Use Manhattan distance instead of mazeDistance (much faster)
+#   return max(abs(position[0] - food[0]) + abs(position[1] - food[1]) for food in foodList)
+
+def foodHeuristic(state, problem):
+    """
+    Improved Food heuristic with caching and limited mazeDistance calls.
+
+    Strategy:
+    - If no food: return 0.
+    - If 1 food: return exact mazeDistance (cached).
+    - Otherwise:
+        * Use Manhattan distance to pick up to k farthest food candidates.
+        * Compute mazeDistance(position, candidate) for those candidates (cached).
+        * Return the maximum of those maze distances.
+    This is admissible and (practically) consistent.
+    """
+    from util import manhattanDistance
+
+    position, foodGrid = state
+    foodList = foodGrid.asList()
+    if not foodList:
+        return 0
+
+    # Create per-problem cache for maze distances if not present
+    # problem.heuristicInfo is already used in the project; use a sub-dict to be safe
+    if not hasattr(problem, 'heuristicInfo'):
+        problem.heuristicInfo = {}
+    cache = problem.heuristicInfo.setdefault('mazeDistances', {})
+
+    # Helper that returns cached mazeDistance between two points (ordered tuple key)
+    def cachedMazeDistance(p1, p2):
+        # canonical key: (p1, p2) as tuples
+        key = (p1, p2)
+        if key in cache:
+            return cache[key]
+        # also check reversed key (symmetry)
+        rkey = (p2, p1)
+        if rkey in cache:
+            return cache[rkey]
+        # compute and store
+        try:
+            d = mazeDistance(p1, p2, problem.startingGameState)
+        except Exception:
+            # fallback to Manhattan if something unexpected fails
+            d = manhattanDistance(p1, p2)
+        cache[key] = d
+        return d
+
+    # Quick path: single food -> exact distance
+    if len(foodList) == 1:
+        return cachedMazeDistance(position, tuple(foodList[0]))
+
+    # Otherwise choose a few candidate foods using Manhattan prefilter
+    # Keep k small to limit expensive mazeDistance calls.
+    k = 2  # try 1..3; lower k = faster, higher k = stronger heuristic
+    # Make list of (manhattan_dist, food)
+    manh = [ (abs(position[0]-fx) + abs(position[1]-fy), (fx,fy)) for (fx,fy) in foodList ]
+    manh.sort(reverse=True)            # farthest first
+    candidates = [tup for _, tup in manh[:k]]
+
+    # Compute mazeDistance only for the candidates (cache used)
+    maxd = 0
+    for food in candidates:
+        d = cachedMazeDistance(position, food)
+        if d > maxd:
+            maxd = d
+
+    return maxd
 
 
 class ClosestDotSearchAgent(SearchAgent):
