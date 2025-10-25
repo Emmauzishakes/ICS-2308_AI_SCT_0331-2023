@@ -1,7 +1,7 @@
 # pacman.py
 # ---------
-# Licensing Information: Please do not distribute or publish solutions to this
-# project. You are free to use and extend these projects for educational
+# Licensing Information: Please do not distribute or publish solutions to these
+# projects. You are free to use and extend these projects for educational
 # purposes. The Pacman AI projects were developed at UC Berkeley, primarily by
 # John DeNero (denero@cs.berkeley.edu) and Dan Klein (klein@cs.berkeley.edu).
 # For more info, see http://inst.eecs.berkeley.edu/~cs188/sp09/pacman.html
@@ -40,7 +40,9 @@ from game import Actions
 from util import nearestPoint
 from util import manhattanDistance
 import util, layout
-import sys, types, time, random, os
+import sys, types, time, random, os, importlib
+
+sys.path.append(os.path.join(os.path.dirname(__file__), 'search'))
 
 ###################################################
 # YOUR INTERFACE TO THE PACMAN WORLD: A GameState #
@@ -227,6 +229,8 @@ class GameState:
     """
     Allows two states to be compared.
     """
+    if other is None:
+        return False
     return self.data == other.data
 
   def __hash__( self ):
@@ -459,7 +463,7 @@ def parseAgentArgs(str):
   opts = {}
   for p in pieces:
     if '=' in p:
-      key, val = p.split('=')
+      key, val = p.split('=', 1)
     else:
       key,val = p, 1
     opts[key] = val
@@ -535,13 +539,20 @@ def readCommand( argv ):
   if options.numTraining > 0:
     args['numTraining'] = options.numTraining
     if 'numTraining' not in agentOpts: agentOpts['numTraining'] = options.numTraining
+  # Accept either legacy 'numTrain' or modern 'numTraining' in agentOpts
+  if 'numTrain' in agentOpts and 'numTraining' not in agentOpts:
+    agentOpts['numTraining'] = agentOpts['numTrain']
+
   pacman = pacmanType(**agentOpts) # Instantiate Pacman with agentArgs
   args['pacman'] = pacman
 
   # Don't display training games
   if 'numTrain' in agentOpts:
-    options.numQuiet = int(agentOpts['numTrain'])
-    options.numIgnore = int(agentOpts['numTrain'])
+    try:
+      options.numQuiet = int(agentOpts['numTrain'])
+      options.numIgnore = int(agentOpts['numTrain'])
+    except Exception:
+      pass
 
   # Choose a ghost agent
   ghostType = loadAgent(options.ghost, noKeyboard)
@@ -566,10 +577,9 @@ def readCommand( argv ):
   # Special case: recorded games don't use the runGames method or args structure
   if options.gameToReplay != None:
     print('Replaying recorded game %s.' % options.gameToReplay)
-    import cPickle
-    f = open(options.gameToReplay)
-    try: recorded = cPickle.load(f)
-    finally: f.close()
+    import pickle
+    with open(options.gameToReplay, 'rb') as f:
+      recorded = pickle.load(f)
     recorded['display'] = args['display']
     replayGame(**recorded)
     sys.exit(0)
@@ -587,7 +597,7 @@ def loadAgent(pacman, nographics):
 
   for moduleDir in pythonPathDirs:
     if not os.path.isdir(moduleDir): continue
-    moduleNames = [f for f in os.listdir(moduleDir) if f.endswith('gents.py')]
+    moduleNames = [f for f in os.listdir(".") if f.endswith('Agents.py')]
     for modulename in moduleNames:
       try:
         module = __import__(modulename[:-3])
@@ -639,12 +649,11 @@ def runGames( layout, pacman, ghosts, display, numGames, record, numTraining = 0
     if not beQuiet: games.append(game)
 
     if record:
-      import time, cPickle
-      fname = ('recorded-game-%d' % (i + 1)) +  '-'.join([str(t) for t in time.localtime()[1:6]])
-      f = file(fname, 'w')
-      components = {'layout': layout, 'actions': game.moveHistory}
-      cPickle.dump(components, f)
-      f.close()
+      import time, pickle
+      fname = ('recorded-game-%d-' % (i + 1)) +  '-'.join([str(t) for t in time.localtime()[1:6]])
+      with open(fname, 'wb') as f:
+        components = {'layout': layout, 'actions': game.moveHistory}
+        pickle.dump(components, f)
 
   if (numGames-numTraining) > 0:
     scores = [game.state.getScore() for game in games]
